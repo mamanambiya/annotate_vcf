@@ -513,7 +513,7 @@ process annotate_vcf {
     input:
         set val(chrm), file(vcf_file) from vcf_data_2
     output:
-        set val(chrm), file("${vcf_out}.gz") into annotate_vcf
+        set val(chrm), file("${vcf_out}.gz") into main
     script:
         vcf_out = "${file(vcf_file.baseName).baseName}_snpeff.vcf"
         """
@@ -529,7 +529,7 @@ process annotate_vcf {
         bcftools index --tbi -f ${vcf_out}.gz
         """
 }
-annotate_vcf.into {annotate_vcf; annotate_vcf_sub}
+main.into {main; annotate_vcf_sub}
 annotate_vcf_sub.subscribe{
     println "Finished ${it.join(', ')}"
 }
@@ -538,7 +538,7 @@ annotate_vcf_sub.subscribe{
 '''
 Step 2.2: Annotate whole baylor database with snpEff using dbSNP database
 '''
-annotate_vcf.into { annotate_vcf; annotate_vcf_1}
+main.into { main; annotate_vcf_1}
 process annotate_dbsnp_baylor {
     echo true
     //maxForks 15
@@ -1217,7 +1217,7 @@ process daf_by_pop_chrm {
 //'''
 //Step 2: Annotate whole baylor database with snpEff using dbSNP database
 //'''
-//annotate_vcf.into { annotate_vcf; annotate_vcf_1}
+//main.into { main; annotate_vcf_1}
 //process annotate_dbsnp_snpeff_all {
 //    echo true
 //    tag "dbSNP_${chrm}"
