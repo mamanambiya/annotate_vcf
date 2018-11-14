@@ -12,7 +12,7 @@
 
 //---- General definitions --------------------------------------------------//
 
-CHRMS = params.chromosomes.split(',')
+chromosomes = params.chromosomes.split(',')
 
 // All POP
 def POPS_ALL = []
@@ -20,12 +20,9 @@ params.POPS.each { entry->
     POPS_ALL.addAll(entry.value.split(','))
 }
 println "Project : $workflow.projectDir"
-//println "Git info: $workflow.repository - $workflow.revision [$workflow.commitId]"
 println "Cmd line: $workflow.commandLine"
-pop_in_sampleFile = file(params.sample_file).readLines().collect{ it.split('\t')[1] }.unique()
-println "User's populations: ${POPS_ALL.join(", ")}"
-println "Populations in sample file: ${pop_in_sampleFile.join(", ")}"
-println "Chromosomes used: ${CHRMS.join(', ')}"
+println "User's populations: ${params.datasets.values().join(", ")}"
+println "Chromosomes used: ${chromosomes.join(', ')}"
 
 
 //// Help functions
@@ -52,100 +49,103 @@ println "Chromosomes used: ${CHRMS.join(', ')}"
 //}
 //
 
-// Create a channel for initial data which is in chromosomes
-datas = []
-datas_merge = []
-CHRMS.each { chromosome ->
-    datas << [chromosome, file(sprintf(params.data, chromosome))]
+// Check if files exist
+// dbSNP vcf
+if(!file(params.dbsnp_vcf).exists()){
+    System.err.println "File ${params.dbsnp_vcf} not found. Please check your config file."
+    exit 1
 }
-vcf_data = Channel.from(params.datasets.split(',')).view()
-//
-//'''
-//Step 1.1: Annotate merge dataset using snpEff database
-//'''
-//vcf_data_merge.into{ vcf_data_merge; vcf_data_merge_1}
-//process split_vcf_to_chrom {
-//    tag "split_vcf_to_chrom_${chrm}_${file(vcf_file.baseName).baseName}"
-//    publishDir "${params.work_dir}/VCF_ANN/MERGED/", overwrite: true, mode:'symlink'
-//    input:
-//        set val(chrm), file(vcf_file) from vcf_data_merge_1
-//    output:
-//        set val(chrm), file("${vcf_out}.gz") into split_vcf_to_chrom
-//    script:
-//        vcf_out = "${file(vcf_file.baseName).baseName}_snpeff.vcf"
-//        """
-//        ${params.snpEff} \
-//            ${params.snpEff_human_db} \
-//            -lof \
-//            -stats ${vcf_file.baseName}.html \
-//            -csvStats ${vcf_file.baseName}.csv \
-//            -dataDir ${params.snpEff_database} \
-//            -c ${params.snpeff_config} \
-//            ${vcf_file} > ${vcf_out} -v -nodownload
-//        bgzip -f ${vcf_out}
-//        bcftools index --tbi -f ${vcf_out}.gz
-//        """
-//}
 
-//'''
-//Step 1.1: Annotate merge dataset using snpEff database
-//'''
-//vcf_data_merge.into{ vcf_data_merge; vcf_data_merge_1}
-//process annotate_vcf_merge {
-//    //maxForks 15
-//    tag "annot_merge_${chrm}_${file(vcf_file.baseName).baseName}"
-//    memory { 5.GB * task.attempt }
-//    time{ 6.hour * task.attempt }
-//    publishDir "${params.work_dir}/VCF_ANN/MERGED/", overwrite: true, mode:'symlink'
-//    input:
-//        set val(chrm), file(vcf_file) from vcf_data_merge_1
-//    output:
-//        set val(chrm), file("${vcf_out}.gz") into annotate_vcf_merge
-//    script:
-//        vcf_out = "${file(vcf_file.baseName).baseName}_snpeff.vcf"
-//        """
-//        ${params.snpEff} \
-//            ${params.snpEff_human_db} \
-//            -lof \
-//            -stats ${vcf_file.baseName}.html \
-//            -csvStats ${vcf_file.baseName}.csv \
-//            -dataDir ${params.snpEff_database} \
-//            -c ${params.snpeff_config} \
-//            ${vcf_file} > ${vcf_out} -v -nodownload
-//        bgzip -f ${vcf_out}
-//        bcftools index --tbi -f ${vcf_out}.gz
-//        """
-//}
-//
-//
-//'''
-//Step 1.2: Annotate whole merge database with snpEff using dbSNP database
-//'''
-//annotate_vcf_merge.into { annotate_vcf_merge; annotate_vcf_merge_1}
-//process annotate_dbsnp_merge {
-//    echo true
-//    //maxForks 15
-//    tag "dbSNP_${chrm}_${file(vcf_file.baseName).baseName}"
-//    memory { 5.GB * task.attempt }
-//    time{ 6.hour * task.attempt }
-//    publishDir "${params.work_dir}/VCF_ANN/MERGED", overwrite: true, mode:'symlink'
-//    input:
-//        set val(chrm), file(vcf_file) from annotate_vcf_merge_1
-//    output:
-//        set val(chrm), file("${vcf_out}.gz") into annotate_dbsnp_merge
-//    script:
-//        vcf_out = "${file(vcf_file.baseName).baseName}_dbsnp.vcf"
-//        """
-//        SnpSift \
-//            annotate \
-//            ${params.dbsnp_vcf} \
-//            -c ${params.snpeff_config} \
-//            ${vcf_file} > ${vcf_out} -v
-//        bgzip -f ${vcf_out}
-//        bcftools index --tbi -f ${vcf_out}.gz
-//        """
-//}
-//
+// Create a channel for initial data which is in chromosomes
+vcf_datas = Channel.create()
+params.datasets.each { data ->
+    if (file(data.value).exists()) {
+        vcf_datas << [data.key, file(data.value)]
+    }
+    else{
+        System.err.println "File ${file(data.value)} not found. Please check your config file."
+        exit 1
+    }
+}
+vcf_datas.close()
+
+'''
+Step 1.1: Split VCF into chrmosomes
+'''
+process split_vcf_to_chrom {
+    tag "split_vcf_to_chrom_${chrm}_${file(vcf_file.baseName).baseName}"
+    publishDir "${params.work_dir}/CHRM/", overwrite: true, mode:'symlink'
+    input:
+        set dataset, file(vcf_file) from vcf_datas
+        each chrm from chromosomes
+    output:
+        set dataset, chrm, file(vcf_out) into split_vcf_to_chrom
+    script:
+        vcf_out = "${file(vcf_file.baseName).baseName}_chr${chrm}.vcf.gz"
+        """
+        bcftools index --tbi -f ${vcf_file}
+        bcftools view \
+            --regions ${chrm} \
+            ${vcf_file} \
+            -Oz -o ${vcf_out}
+        """
+}
+
+'''
+Step 1.2: Annotate merge dataset using snpEff database
+'''
+process annotate_vcf_merge {
+    tag "annot_merge_${chrm}_${file(vcf_file.baseName).baseName}"
+    label "bigmem"
+    publishDir "${params.work_dir}/VCF_ANN/CHRM", overwrite: true, mode:'symlink'
+    input:
+        set dataset, chrm, file(vcf_file) from split_vcf_to_chrom
+    output:
+        set dataset, chrm, file("${vcf_out}.gz") into annotate_vcf_merge
+    script:
+        vcf_out = "${file(vcf_file.baseName).baseName}_snpeff.vcf"
+        """
+        snpEff \
+            ${params.snpEff_human_db} \
+            -lof \
+            -stats ${vcf_file.baseName}.html \
+            -csvStats ${vcf_file.baseName}.csv \
+            -dataDir ${params.snpEff_database} \
+            ${vcf_file} > ${vcf_out} -v -nodownload
+        bgzip -f ${vcf_out}
+        bcftools index --tbi -f ${vcf_out}.gz
+        """
+}
+
+
+'''
+Step 1.3: Annotate whole merge database with snpEff using dbSNP database
+'''
+annotate_vcf_merge.into { annotate_vcf_merge; annotate_vcf_merge_1}
+process annotate_dbsnp_merge {
+    echo true
+    //maxForks 15
+    tag "dbSNP_${chrm}_${file(vcf_file.baseName).baseName}"
+    memory { 5.GB * task.attempt }
+    time{ 6.hour * task.attempt }
+    publishDir "${params.work_dir}/VCF_ANN/CHRM", overwrite: true, mode:'symlink'
+    input:
+        set dataset, chrm, file(vcf_file) from annotate_vcf_merge_1
+    output:
+        set dataset, chrm, file("${vcf_out}.gz") into annotate_dbsnp_merge
+    script:
+        vcf_out = "${file(vcf_file.baseName).baseName}_dbsnp.vcf"
+        """
+        SnpSift \
+            annotate \
+            -v \
+            ${params.dbsnp_vcf} \
+            ${vcf_file} > ${vcf_out} 
+        bgzip -f ${vcf_out}
+        bcftools index --tbi -f ${vcf_out}.gz
+        """
+}
+
 //
 //'''
 //Step 1.3: Annotate VCF for Ancestral Allele (AA) using in-house python script
@@ -172,39 +172,56 @@ vcf_data = Channel.from(params.datasets.split(',')).view()
 //        """
 //}
 //
-//
-//'''
-//Step 1.4.1: LiftOver from build37 to build37 using picard
-//'''
-//gwascatalog_cha = Channel.fromPath(params.gwascatalog)
-//process gwascatalog_b37tob38 {
-//    tag "b37tob38_${gwascatalog.baseName}"
-//    memory { 1.GB * task.attempt }
-//    time{ 1.hour * task.attempt }
-//    publishDir "${params.work_dir}/VCF_ANN/", overwrite: true, mode:'symlink'
-//    input:
-//        file(gwascatalog) from gwascatalog_cha
-//    output:
-//        file(file_out) into gwascatalog_b37tob38
-//    script:
-//        file_out = "${gwascatalog.baseName}_b37.tsv"
-//        bed_out = "${gwascatalog.baseName}_b37.bed"
-//        """
-//        ~/miniconda3/envs/ngs_py27/bin/python ${params.homedir}/templates/gwascatb83tob37.py \
-//            --toBed ${gwascatalog} \
-//            --outBed ${gwascatalog.baseName}.bed
-//        ~/miniconda3/envs/ngs_py27/bin/CrossMap.py bed \
-//            ${params.b37tob38_chain} \
-//            ${gwascatalog.baseName}.bed > \
-//            ${bed_out}
-//        ~/miniconda3/envs/ngs_py27/bin/python ${params.homedir}/templates/gwascatb83tob37.py \
+
+'''
+Step 1.4.1: Convert gwasCat to bed
+'''
+gwascatalog_cha = Channel.fromPath(params.gwascatalog)
+process gwascatalog_to_bed {
+    tag "b37tob38_${gwascatalog.baseName}"
+    memory { 1.GB * task.attempt }
+    time{ 1.hour * task.attempt }
+    publishDir "${params.work_dir}/VCF_ANN/", overwrite: true, mode:'symlink'
+    input:
+        file(gwascatalog) from gwascatalog_cha
+    output:
+        set file(gwascatalog), file(outBed) into gwascatalog_to_bed
+    script:
+        file_out = "${gwascatalog.baseName}_b37.tsv"
+        bed_out = "${gwascatalog.baseName}_b37.bed"
+        toBed = gwascatalog
+        outBed = "${gwascatalog.baseName}.bed"
+        template "gwascat2bed.py"
+}
+
+'''
+Step 1.4.2: LiftOver from build37 to build37 using CrossMap
+'''
+process gwascatalog_b37tob38 {
+    tag "b37tob38_${gwascatalog.baseName}"
+    memory { 1.GB * task.attempt }
+    time{ 1.hour * task.attempt }
+    publishDir "${params.work_dir}/VCF_ANN/", overwrite: true, mode:'symlink'
+    conda "crossmap"
+    input:
+        set file(gwascatalog), file(inBed) from gwascatalog_to_bed
+    output:
+        set file(gwascatalog), file(outBed) into gwascatalog_b37tob38
+    script:
+        file_out = "${gwascatalog.baseName}_b37.tsv"
+        bed_out = "${gwascatalog.baseName}_b37.bed"
+        """
+        CrossMap.py bed \
+            ${params.b37tob38_chain} \
+            ${gwascatalog.baseName}.bed > \
+            ${bed_out}
+        """
+//        ${params.homedir}/templates/gwascatb83tob37.py \
 //            --mappedBed ${bed_out} \
 //            --gwascat ${gwascatalog} \
 //            --outb37 ${file_out}
-//        """
-//}
-//
-//
+}
+
 //'''
 //Step 1.4.2: Annotate whole merge database with snpEff using gwas catalog
 //'''
