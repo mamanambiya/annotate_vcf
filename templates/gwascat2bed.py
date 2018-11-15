@@ -18,20 +18,24 @@ def tobed(inBed, outBed):
     unmapped = 0
     mapped = 0
     out = open(args.outBed, 'w')
+    ncount = 0
     for line in open(args.toBed):
-        line = line.strip().split('\\t')
-        chr = line[11]
-        pos = line[12]
-        if chr == '' or pos == '':
-            unmapped += 1
-        else:
-            mapped += 1
-        if 'x' in chr:
-            chr = chr.split('x')[0]
-            pos = pos.split('x')[0]
-        if ';' in chr: chr = chr.split(';')[0]
-        if ';' in pos: pos = pos.split(';')[0]
-        out.writelines(str(chr)+" "+str(pos)+" "+str(pos)+"\\n")
+        if ncount > 0:
+            line = line.strip().split('\\t')
+            chr = line[11]
+            pos = line[12]
+            if chr == '' or pos == '':
+                unmapped += 1
+            else:
+                mapped += 1
+            if 'x' in chr:
+                chr = chr.split('x')[0]
+                pos = pos.split('x')[0]
+            if ';' in chr: chr = chr.split(';')[0]
+            if ';' in pos: pos = pos.split(';')[0]
+            out.writelines(str(chr)+" "+str(pos)+" "+str(pos)+"\\n")
+        ncount += 1
+
     out.close()
     return mapped, unmapped
 

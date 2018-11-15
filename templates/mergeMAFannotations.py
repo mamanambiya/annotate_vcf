@@ -1,73 +1,51 @@
-#!/home/mamana/miniconda3/envs/ngs_py27/bin/python
+#!/usr/bin/env python2.7
 '''
 
 '''
-import argparse,sys,time
+import argparse,sys,time,gzip
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--inTSV", help="One or many TSV annotation files, if many use ';' as separator")
-parser.add_argument("--outTSV", help="TSV annotation file")
-parser.add_argument("--chrm", help="chromosome to consider")
+parser.add_argument("--inTSV", default="${inTSV}", help="One or many TSV annotation files, if many use ';' as separator")
+parser.add_argument("--outTSV", default="${outTSV}", help="TSV annotation file")
+parser.add_argument("--chrm", default="${chrm}", help="chromosome to consider")
 args = parser.parse_args()
 
-
-def readTSV(inTSV_list, chrm='', outTSV=''):
+def mergeMAFannotations(inTSV, chrm='', outTSV=''):
     '''
     :param inBed:
     :param outBed:
     :return:
     '''
-    print chrm
-    inTSV_list = inTSV_list.split(';')
-    if outTSV != '':
-        outTSV_out = open(outTSV,'w')
-    datas_tsv = {}
-    datas_tsv['CHRM:POS'] = []
-    for tsv in inTSV_list:
-        for line in open(tsv):
-            if "#CHRM" in line or '#chr' in line:
-                line = line.strip().split('\t')
-                datas_tsv['CHRM:POS'] += line[1:]
-                header = line[1:]
-            else:
-                line = line.strip().split('\t')
-
-                try:
-                    chr = line[0].split(':')[0]
-                    pos = line[0].split(':')[1]
-                except:
-                    pos = line[0]
-                    chr = line[0]
+    outTSV_out = open(outTSV, 'w')
+    print "Reading ",inTSV
+    for line in open(inTSV):
+        if "#CHRM" in line or '#chr' in line:
+            line = line.strip().split('\\t')
+            header = line[1:]
+            outTSV_out.writelines('\\t'.join(['#CHRM:POS'] + header) + '\\n')
+        else:
+            line = line.strip().split('\\t')
+            try:
+                chr = line[0].split(':')[0]
+                pos = line[0].split(':')[1]
+            except:
+                pass
+            if str(chr) == str(chrm):
+                chr_pos = chr + ':' + pos
                 maf = line[1:]
                 maf_ = []
-                if chrm == '':
-                    for i in range(len(header)):
-                        try:
-                            maf_.append(header[i] + '=' + maf[i])
-                        except:
-                            print datas_tsv['CHRM:POS'], maf
-                    if not chr + ':' + pos in datas_tsv:
-                        datas_tsv[chr + ':' + pos] = []
-                    datas_tsv[chr + ':' + pos] += maf_
-                else:
-                    if str(chrm) == str(chr):
-                        for i in range(len(header)):
-                            try:
-                                maf_.append(header[i]+'='+maf[i])
-                            except:
-                                print datas_tsv['CHRM:POS'], maf
-                        if not chr+':'+pos in datas_tsv:
-                            datas_tsv[chr+':'+pos] = []
-                        datas_tsv[chr+':'+pos] += maf_
+                for i in range(len(header)):
+                    try:
+                        maf_i = float(maf[i])
+                        if maf_i <= 0.5:
+                            maf_.append(header[i] + '=' + str(maf_i))
+                        else:
+                            maf_.append(header[i] + '=' + str(1 - maf_i))
+                    except:
+                        print maf
+                outTSV_out.writelines('\\t'.join([chr_pos] + maf_) + '\\n')
+    outTSV_out.close()
 
-    if outTSV != '':
-        # outTSV_out.writelines('\t'.join(['#CHRM:POS'] + datas_tsv['CHRM:POS']) + '\n')
-        for data in datas_tsv:
-            if 'CHRM:POS' not in data:
-                outTSV_out.writelines('\t'.join([data]+datas_tsv[data])+'\n')
-        outTSV_out.close()
-
-elif args.inTSV:
-    if not args.chrm:
-        args.chrm = ''
-    readTSV(args.inTSV, args.chrm, args.outTSV)
+if __name__ == '__main__':
+    if args.inTSV != '' and args.chrm != '' and args.outTSV != '':
+        mergeMAFannotations(args.inTSV, args.chrm, args.outTSV)
