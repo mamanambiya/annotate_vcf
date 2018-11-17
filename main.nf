@@ -205,6 +205,7 @@ process annotate_clinvar {
     script:
         vcf_out = "${file(vcf_file.baseName).baseName}_clinvar.vcf"
         """
+        bcftools index --tbi -f ${vcf_file}
         SnpSift \
             annotate \
             ${params.clinvar} \
@@ -230,6 +231,7 @@ process annotate_cosmic {
     script:
         vcf_out = "${file(vcf_file.baseName).baseName}_cosmic.vcf"
         """
+        bcftools index --tbi -f ${vcf_file}
         SnpSift \
             annotate \
             ${params.cosmic} \
