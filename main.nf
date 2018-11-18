@@ -73,6 +73,7 @@ process snpeff_vcf {
     script:
         vcf_out = "${file(vcf_file.baseName).baseName}_snpeff.vcf"
         """
+        bcftools index --tbi -f ${vcf_file}
         snpEff \
             ${params.snpEff_human_db} \
             -lof \
@@ -99,6 +100,7 @@ process annotate_dbsnp {
     script:
         vcf_out = "${file(vcf_file.baseName).baseName}_dbsnp.vcf"
         """
+        bcftools index --tbi -f ${vcf_file}
         SnpSift \
             annotate \
             -v \
