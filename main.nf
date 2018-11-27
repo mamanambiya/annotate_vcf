@@ -134,7 +134,6 @@ Step 1.4.2: LiftOver from build37 to build37 using CrossMap
 process bed_b38tob37 {
     tag "b37tob38_${gwascatalog.baseName}"
     label "bigmem"
-    time{ 1.hour * task.attempt }
     input:
         set file(gwascatalog), file(inBed) from gwascatalog_to_bed
     output:
@@ -157,7 +156,6 @@ Step 1.4.2: LiftOver from build37 to build37 using CrossMap
 process gwascatalog_b37tob38 {
     tag "b37tob38_${gwascat_b38.baseName}"
     label "bigmem"
-    time{ 1.hour * task.attempt }
     input:
         set file(gwascat_b38), file(mappedBed) from bed_b38tob37
     output:
@@ -172,7 +170,6 @@ Step 1.4.2: Annotate whole dataset with snpEff using gwas catalog
 '''
 annotate_dbsnp_1 = annotate_dbsnp.combine(gwascatalog_b37tob38)
 process annotate_gwascat {
-    echo true
     tag "gwascat_${chrm}_${file(vcf_file.baseName).baseName}"
     label "bigmem"
     input:
@@ -314,6 +311,30 @@ process annotate_mafs {
 }
 
 
+"""
+1.8: Annotate for dbNSFP
+"""
+annotate_mafs.into{ annotate_mafs; annotate_mafs_1}
+process annotate_dbnsfp{
+    tag "snpeff_${file(vcf_file.baseName).baseName}"
+    label "medium"
+    publishDir "${params.work_dir}/data/${dataset}/ALL/VCF", overwrite: true, mode:'symlink'
+    input:
+        set dataset, chrm, file(vcf_file) from annotate_mafs_1
+    output:
+        set dataset, chrm, file("${vcf_out}.gz") into annotate_dbnsfp
+    script:
+        vcf_out = "${file(vcf_file.baseName).baseName}_dbnsfp.vcf"
+        """
+        SnpSift dbnsfp \
+            -f Ancestral_allele,SIFT_score,SIFT_converted_rankscore,SIFT_pred,Uniprot_acc_Polyphen2,Uniprot_id_Polyphen2,Uniprot_aapos_Polyphen2,Polyphen2_HDIV_score,Polyphen2_HDIV_rankscore,Polyphen2_HDIV_pred,Polyphen2_HVAR_score,Polyphen2_HVAR_rankscore,Polyphen2_HVAR_pred,LRT_score,LRT_converted_rankscore,LRT_pred,LRT_Omega,MutationTaster_score,MutationTaster_converted_rankscore,MutationTaster_pred,MutationTaster_model,MutationTaster_AAE,MutationAssessor_UniprotID,MutationAssessor_variant,MutationAssessor_score,MutationAssessor_score_rankscore,MutationAssessor_pred,FATHMM_score,FATHMM_converted_rankscore,FATHMM_pred,PROVEAN_score,PROVEAN_converted_rankscore,PROVEAN_pred,Transcript_id_VEST3,Transcript_var_VEST3,VEST3_score,VEST3_rankscore,MetaSVM_score,MetaSVM_rankscore,MetaSVM_pred,MetaLR_score,MetaLR_rankscore,MetaLR_pred,Reliability_index,M-CAP_score,M-CAP_rankscore,M-CAP_pred,REVEL_score,REVEL_rankscore,MutPred_score,MutPred_rankscore,MutPred_protID,MutPred_AAchange,MutPred_Top5features,CADD_raw,CADD_raw_rankscore,CADD_phred,DANN_score,DANN_rankscore,fathmm-MKL_coding_score,fathmm-MKL_coding_rankscore,fathmm-MKL_coding_pred,fathmm-MKL_coding_group,Eigen_coding_or_noncoding,Eigen-raw,Eigen-phred,Eigen-PC-raw,Eigen-PC-phred,Eigen-PC-raw_rankscore,GenoCanyon_score,GenoCanyon_score_rankscore,integrated_fitCons_score,integrated_fitCons_score_rankscore,integrated_confidence_value,GM12878_fitCons_score,GM12878_fitCons_score_rankscore,GM12878_confidence_value,H1-hESC_fitCons_score,H1-hESC_fitCons_score_rankscore,H1-hESC_confidence_value,HUVEC_fitCons_score,HUVEC_fitCons_score_rankscore,HUVEC_confidence_value,GERP++_NR,GERP++_RS,GERP++_RS_rankscore,phyloP100way_vertebrate,phyloP100way_vertebrate_rankscore,phyloP20way_mammalian,phyloP20way_mammalian_rankscore,phastCons100way_vertebrate,phastCons100way_vertebrate_rankscore,phastCons20way_mammalian,phastCons20way_mammalian_rankscore,SiPhy_29way_pi,SiPhy_29way_logOdds,SiPhy_29way_logOdds_rankscore  \
+            -v -db ${params.dbnsfp_db} \
+            ${vcf_file} -v > ${vcf_out}
+        bgzip -f ${vcf_out}
+        bcftools index --tbi -f ${vcf_out}.gz
+        """
+}
+
 '''
 Step 1.9: Concatenate chromosome VCFs into one
 '''
@@ -356,7 +377,7 @@ process concat_dataset {
 
 workflow.onComplete {
     def subject = 'My pipeline execution'
-    def recipient = 'mypandos@gmail.com'
+    def recipient = 'mamana.mbiyavanga@uct.ac.za'
 
     ['mail', '-s', subject, recipient].execute() << """
 
