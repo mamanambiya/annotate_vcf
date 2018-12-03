@@ -272,12 +272,11 @@ process generate_mafs_chr {
 Step 1.7.2: Annotate whole dataset  with mafs from AGVP, SAHGP, TRYPANOGEN, gnomAD, ExAC
 '''
 mafs_annot.into { mafs_annot; mafs_annot_1 }
-annotate_cosmic.into { annotate_cosmic; annotate_cosmic_1}
 mafs_annot_list = mafs_annot_1.toSortedList().val
 
 def cosmic_annot_list = { dataset, chrm, vcf_file ->
-    annotate_cosmic = [:]
-    annotate_cosmic[chrm] = [dataset, chrm, file(vcf_file)]
+    annotate_cosmic_ = [:]
+    annotate_cosmic_[chrm] = [dataset, chrm, file(vcf_file)]
     annot = []
     datasets = []
     mafs_annot_list.each{ mafs, chr, mafs_file ->
@@ -289,12 +288,12 @@ def cosmic_annot_list = { dataset, chrm, vcf_file ->
             datasets << mafs
         }
     }
-    annotate_cosmic[chrm] << annot.join(';')
-    annotate_cosmic[chrm] << datasets.toSorted().join('-')
-    return annotate_cosmic.values()
+    annotate_cosmic_[chrm] << annot.join(';')
+    annotate_cosmic_[chrm] << datasets.toSorted().join('-')
+    return annotate_cosmic_.values()
 }
-annotate_cosmic_2_cha = annotate_cosmic_1.
-        flatMap{ it -> cosmic_annot_list (it) }
+annotate_cosmic.into { annotate_cosmic; annotate_cosmic_1}
+annotate_cosmic_2_cha = annotate_cosmic.flatMap{ it -> cosmic_annot_list (it) }
 
 process annotate_mafs {
     tag "mafs_${file(vcf_file.baseName).baseName}"
@@ -318,7 +317,7 @@ annotate_mafs.into{ annotate_mafs; annotate_mafs_1}
 process annotate_dbnsfp{
     tag "snpeff_${file(vcf_file.baseName).baseName}"
     label "medium"
-    publishDir "${params.work_dir}/data/${dataset}/ALL/VCF", overwrite: true, mode:'symlink'
+    publishDir "${params.output_dir}/ANN/CHRS", overwrite: true, mode:'copy'
     input:
         set dataset, chrm, file(vcf_file) from annotate_mafs_1
     output:
@@ -338,17 +337,17 @@ process annotate_dbnsfp{
 '''
 Step 1.9: Concatenate chromosome VCFs into one
 '''
-annotate_mafs_list = [:]
-annotate_mafs_1 = annotate_mafs.toSortedList().val
-annotate_mafs_1.each { dataset, chrm, vcf_chrm_pop ->
-    if(dataset in annotate_mafs_list.keySet()) {
-        annotate_mafs_list[dataset][1] = annotate_mafs_list[dataset][1] + ' ' + vcf_chrm_pop
+annotate_dbnsfp_list = [:]
+annotate_dbnsfp_1 = annotate_dbnsfp.toSortedList().val
+annotate_dbnsfp_1.each { dataset, chrm, vcf_chrm_pop ->
+    if(dataset in annotate_dbnsfp_list.keySet()) {
+        annotate_dbnsfp_list[dataset][1] = annotate_dbnsfp_list[dataset][1] + ' ' + vcf_chrm_pop
     }
     else{
-        annotate_mafs_list[dataset] = [dataset, vcf_chrm_pop]
+        annotate_dbnsfp_list[dataset] = [dataset, vcf_chrm_pop]
     }
 }
-annotate_mafs_cha = Channel.from(annotate_mafs_list.values())
+annotate_mafs_cha = Channel.from(annotate_dbnsfp_list.values())
 
 process concat_dataset {
     tag "concat_dataset_${dataset}_${chromosomes[0]}-${chromosomes[-1]}"

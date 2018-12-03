@@ -9,7 +9,7 @@ mkdir -p ${OUTDIR}/LOG
 cd ${OUTDIR}
 nextflow -log ${OUTDIR}/LOG/annotate_vcf.log \
     -C ${HOMEDIR}/WITS/nextflow.config \
-    run ~/annotate_vcf/main.nf \
+    run mypandos/annotate_vcf/main.nf \
     -w ${OUTDIR}/work \
     -resume \
-    -profile pbs
+    -profile slurm
